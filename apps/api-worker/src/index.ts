@@ -1,27 +1,22 @@
 import { Hono } from "hono"
-import { createAuth, type Auth } from "./lib/auth"
-import type { TaskQueueBinding } from "./lib/queue"
+import { createAuth } from "./lib/auth"
+import { type AppEnv } from "./lib/env"
+import { requireAuth } from "./middleware/auth"
+import {
+  requirePlatformPermission,
+} from "./middleware/guards"
 
-type Bindings = {
-  DATABASE_URL: string
-  BETTER_AUTH_SECRET: string
-  BETTER_AUTH_URL: string
-  TASK_QUEUE: TaskQueueBinding
-}
-
-type Variables = {
-  auth: Auth
-}
-
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+const app = new Hono<AppEnv>()
 
 // Una instancia de auth POR REQUEST. Evita compartir la conexión
 // a Neon entre requests concurrentes dentro del mismo Worker.
 app.use("*", async (c, next) => {
-  const auth = createAuth(c.env)
-  c.set("auth", auth)
+  c.set("auth", createAuth(c.env))
   await next()
 })
+
+// Healthcheck
+app.get("/healthz", (c) => c.json({ ok: true }))
 
 // Better Auth maneja TODAS sus rutas internamente:
 // /api/auth/sign-in, /api/auth/sign-up, /api/auth/organization/*,
@@ -30,46 +25,39 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
   return c.get("auth").handler(c.req.raw)
 })
 
-// Ejemplo de ruta propia, protegida con la sesión de Better Auth
-app.get("/api/organizations/me", async (c) => {
-  const auth = c.get("auth")
-  const session = await auth.api.getSession({ headers: c.req.raw.headers })
-
-  if (!session) {
-    return c.json({ error: "No autenticado" }, 401)
-  }
-
-  return c.json({ session })
+// Sesión del usuario logueado (cualquier rol, plataforma u organización).
+app.get("/api/organizations/me", requireAuth, (c) => {
+  return c.json({ session: c.get("session"), user: c.get("user") })
 })
 
-// Ejemplo: un platform admin crea una organización nueva.
+// Un platform admin crea una organización nueva.
 // (allowUserToCreateOrganization está en false — esta es la única vía)
-app.post("/api/admin/organizations", async (c) => {
-  const auth = c.get("auth")
-  const session = await auth.api.getSession({ headers: c.req.raw.headers })
+// Guarda: solo platform owner/admin pueden crear organizaciones.
+app.post(
+  "/api/admin/organizations",
+  requireAuth,
+  requirePlatformPermission({ organization: ["create"] }),
+  async (c) => {
+    const { name, slug } = await c.req.json()
+    const organization = await c.get("auth").api.createOrganization({
+      body: { name, slug },
+      headers: c.req.raw.headers,
+    })
 
-  if (!session) {
-    return c.json({ error: "No autenticado" }, 401)
+    // Avisa al jobs-worker para que mande el email de bienvenida,
+    // sin bloquear esta respuesta.
+    await c.env.TASK_QUEUE.send({
+      type: "organization.created",
+      organizationId: organization.id,
+      organizationName: organization.name,
+    })
+
+    return c.json({ organization })
   }
-  // TODO: validar que session.user.role sea "admin" u "owner" de
-  // plataforma antes de continuar (auth.api.userHasPermission).
+)
 
-  const { name, slug } = await c.req.json()
-
-  const organization = await auth.api.createOrganization({
-    body: { name, slug },
-    headers: c.req.raw.headers,
-  })
-
-  // Avisa al jobs-worker para que mande el email de bienvenida,
-  // sin bloquear esta respuesta.
-  await c.env.TASK_QUEUE.send({
-    type: "organization.created",
-    organizationId: organization.id,
-    organizationName: organization.name,
-  })
-
-  return c.json({ organization })
-})
+// Ejemplo de uso de requirePlatformRole: una ruta hipotética que
+// solo el platform owner puede ver (métricas internas, etc).
+// app.get("/api/admin/internal/metrics", requireAuth, requirePlatformRole("owner"), handler)
 
 export default app
