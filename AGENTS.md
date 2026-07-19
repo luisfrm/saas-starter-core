@@ -99,7 +99,8 @@ scope global del módulo (ver `apps/api-worker/src/lib/auth.ts`).
 ## Verificación y comandos (estado real hoy)
 
 - `pnpm typecheck` (turbo → `tsc --noEmit` por paquete) es la **única**
-  verificación que existe. Úsala antes de dar por terminado un cambio.
+  verificación que existe. Pasa en los 5 paquetes con script (los 3
+  frontends + `api-worker` + `jobs-worker`).
 - **No hay tests ni linter en ningún paquete.** `pnpm lint` corre
   `turbo run lint` pero ningún paquete define script `lint` → no-op.
   No asumas que "pasó lint" significa algo.
@@ -108,6 +109,38 @@ scope global del módulo (ver `apps/api-worker/src/lib/auth.ts`).
   de `apps/api-worker/src/lib/auth.ts`) → `pnpm db:generate` (SQL de
   migración) → `pnpm db:migrate` (lo aplica a `DATABASE_URL`).
 - Setup completo desde cero (env vars, colas, bucket R2): ver README.
+
+## Autorización en `api-worker` (estilo guards de NestJS)
+
+Las rutas protegidas se encadenan con middlewares de Hono, en orden.
+El equivalente directo de `@UseGuards()` en Nest:
+
+```ts
+app.post("/api/admin/organizations",
+  requireAuth,                                            // 401 sin sesión
+  requirePlatformPermission({ organization: ["create"] }), // 403 sin permiso
+  async (c) => { /* handler limpio */ }
+)
+```
+
+**Guards disponibles en `apps/api-worker/src/middleware/`:**
+
+| Guard | Pregunta | Cómo decide | Costo |
+|---|---|---|---|
+| `requireAuth` | ¿Hay sesión? | `auth.api.getSession` | 1 round-trip a Neon |
+| `requirePlatformPermission(perms)` | ¿El rol de **plataforma** del usuario incluye este permiso? | `auth.api.userHasPermission` (plugin `admin`) | 1 round-trip (chequeo en memoria después) |
+| `requirePlatformRole(...roles)` | ¿El usuario tiene uno de estos roles de plataforma? | Lee `session.user.role` (sin llamada) | Gratis |
+| `requireOrgPermission(perms)` | ¿El rol de **organización** del usuario incluye este permiso? | `auth.api.hasPermission` (plugin `organization`) | 1 round-trip a Neon (resuelve member) |
+
+**Reglas:**
+
+- `requireAuth` va **siempre primero**; los demás lo asumen.
+- Para org-scoped, el guard busca `:orgId` en los params de la ruta; si
+  no está, usa `session.activeOrganizationId`.
+- Mejor Auth expone dos APIs distintas: `userHasPermission` (plataforma,
+  plugin `admin`) y `hasPermission` (organización, plugin `organization`).
+  No las mezcles. Las firmas exactas se verificaron contra
+  `better-auth@1.6.23` (la instalada) — ver `apps/api-worker/src/middleware/guards.ts`.
 
 ## Gotchas que no se ven leyendo un solo archivo
 
@@ -142,14 +175,6 @@ Verificado contra el código (julio 2026). Dos grupos:
 
 **De diseño/código (decisiones pospuestas a propósito):**
 
-- [ ] Permiso real en rutas protegidas de `api-worker`: hoy solo se
-      chequea sesión (`getSession`). El TODO está en
-      `apps/api-worker/src/index.ts`. La firma exacta de Better Auth
-      (`auth.api.hasPermission` vs `auth.api.userHasPermission`) quedó
-      **sin confirmar** contra better-auth@^1.4 — verificarla en los
-      types/doc antes de implementar, no asumirla.
-- [ ] Middleware compartido de autorización (`requirePermission("x:y")`)
-      reusable entre rutas de `api-worker`
 - [ ] `blog/`: no scaffoldeado a propósito — primero definir el modelo
       de contenido del CMS, luego crear la app siguiendo el patrón de
       `public-web`
