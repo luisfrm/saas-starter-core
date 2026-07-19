@@ -1,0 +1,13 @@
+import { createAuthClient } from "better-auth/client"
+import { organizationClient } from "better-auth/client/plugins"
+import { organizationAc, organizationRoles } from "@repo/shared/access-control"
+
+export const authClient = createAuthClient({
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  plugins: [
+    organizationClient({
+      ac: organizationAc,
+      roles: organizationRoles,
+    }),
+  ],
+})

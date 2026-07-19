@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jobs-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Consumer: procesa lo que api-worker publica en "task-events".
+  "queues": {
+    "consumers": [
+      {
+        "queue": "task-events",
+        "max_batch_size": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "task-events-dlq"
+      }
+    ]
+  },
+
+  "r2_buckets": [
+    { "binding": "FILES_BUCKET", "bucket_name": "saas-starter-files" }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}

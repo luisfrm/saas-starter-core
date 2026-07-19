@@ -1,0 +1,9 @@
+node_modules
+.turbo
+dist
+.next
+.wrangler
+.env
+.env.local
+*.log
+drizzle/

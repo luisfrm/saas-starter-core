@@ -1,0 +1,18 @@
+{
+  "name": "saas-starter-core",
+  "private": true,
+  "packageManager": "pnpm@10.30.2",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @repo/db run generate",
+    "db:migrate": "pnpm --filter @repo/db run migrate",
+    "auth:generate": "pnpm --filter api-worker run auth:generate"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  }
+}

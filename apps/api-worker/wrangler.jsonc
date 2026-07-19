@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "api-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Variables de entorno no-secretas. DATABASE_URL y BETTER_AUTH_SECRET
+  // se suben con `wrangler secret put <NOMBRE>`, no van aquí.
+  "vars": {
+    "BETTER_AUTH_URL": "http://localhost:8787"
+  },
+
+  // Productor: este Worker publica eventos, no los consume.
+  // Ver apps/jobs-worker para el consumer.
+  "queues": {
+    "producers": [
+      { "queue": "task-events", "binding": "TASK_QUEUE" }
+    ]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

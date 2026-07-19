@@ -1,0 +1,17 @@
+{
+  "name": "@repo/shared",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./access-control": "./src/access-control.ts"
+  },
+  "dependencies": {
+    "better-auth": "^1.4.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
