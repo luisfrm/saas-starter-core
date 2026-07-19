@@ -14,8 +14,10 @@ import { createAccessControl } from "better-auth/plugins/access"
  */
 const platformStatement = {
   user: ["create", "list", "ban", "impersonate", "delete", "set-role"],
-  organization: ["approve", "suspend", "delete"],
+  organization: ["create", "approve", "suspend", "delete"],
 } as const
+
+export type PlatformStatement = typeof platformStatement
 
 export const platformAc = createAccessControl(platformStatement)
 
@@ -25,16 +27,16 @@ export const platformRoles = {
     user: ["list"],
     organization: [],
   }),
-  // Operación diaria de la plataforma: aprobar/suspender organizaciones,
-  // gestionar usuarios reportados
+  // Operación diaria de la plataforma: crear/aprobar/suspender
+  // organizaciones, gestionar usuarios reportados
   admin: platformAc.newRole({
     user: ["list", "ban", "set-role"],
-    organization: ["approve", "suspend"],
+    organization: ["create", "approve", "suspend"],
   }),
   // Control total (fundador / equipo core)
   owner: platformAc.newRole({
     user: ["create", "list", "ban", "impersonate", "delete", "set-role"],
-    organization: ["approve", "suspend", "delete"],
+    organization: ["create", "approve", "suspend", "delete"],
   }),
 }
 
@@ -61,6 +63,8 @@ const organizationStatement = {
   billing: ["manage"],
   member: ["invite", "remove", "update-role"],
 } as const
+
+export type OrganizationStatement = typeof organizationStatement
 
 export const organizationAc = createAccessControl(organizationStatement)
 
