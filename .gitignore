@@ -1,9 +1,56 @@
-node_modules
-.turbo
-dist
-.next
-.wrangler
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Next.js build output
+.next/
+**/.next/
+# Next.js genera este archivo en el primer dev/build; lo ignoramos para
+# no commitearlo. Si un dev clona el repo y corre typecheck sin haber
+# hecho un `next dev` o `next build` antes, el archivo se creará solo.
+next-env.d.ts
+**/next-env.d.ts
+
+# Hono / Wrangler build & local state
+.wrangler/
+**/.wrangler/
+dist/
+**/dist/
+
+# Turbo build cache
+.turbo/
+**/.turbo/
+
+# Environmental variables / Secrets / Wrangler vars
 .env
 .env.local
-*.log
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+*.env
+.dev.vars
+
+# Database migrations (Currently ignored in this starter, but usually committed when cloning)
 drizzle/
+**/drizzle/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# System Files / OS metadata
+.DS_Store
+Thumbs.db
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
