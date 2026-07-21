@@ -18,6 +18,10 @@ next-env.d.ts
 .wrangler/
 **/.wrangler/
 dist/
+
+# Storybook static build
+storybook-static/
+**/storybook-static/
 **/dist/
 
 # Turbo build cache

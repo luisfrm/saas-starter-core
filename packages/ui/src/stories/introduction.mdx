@@ -1,0 +1,67 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+<Meta title="Introduction" />
+
+# Design system
+
+This Storybook catalogs the shared UI components in `packages/ui`. They are
+plain React + Tailwind CSS primitives built on top of [shadcn/ui](https://ui.shadcn.com/)
+and [Radix UI](https://www.radix-ui.com/) and are consumed by the three
+frontends in this monorepo (`apps/public-web`, `apps/panel`, `apps/console`).
+
+## What lives here
+
+- `Button`, `Badge`, `Card`, `Input`, `Label`, `Separator`, `Skeleton` —
+  styled primitives ready to import.
+- `cn()` in `lib/utils` — `clsx` + `tailwind-merge` helper for composing
+  className strings safely.
+- `tokens.css` / `globals.css` — the theme. Edit `tokens.css` to rebrand
+  a cloned project; never touch `globals.css` directly.
+
+## How to use
+
+```tsx
+import { Button } from "@repo/ui/components/ui/button"
+import { Card, CardHeader, CardTitle } from "@repo/ui/components/ui/card"
+
+export function Example() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Hello</CardTitle>
+      </CardHeader>
+      <Button>Click me</Button>
+    </Card>
+  )
+}
+```
+
+## Theming
+
+The toolbar at the top of this Storybook switches between **light** and
+**dark** themes. The same toggle is wired into the Next.js apps via
+[`next-themes`](https://github.com/pacocoursey/next-themes) (see
+`apps/*/src/components/theme-provider.tsx`).
+
+The tokens are defined with [OKLCH](https://oklch.com/) — perceptually
+uniform colors that interpolate cleanly.
+
+## Adding a new component
+
+1. From `packages/ui/`, run:
+   ```bash
+   pnpm dlx shadcn@latest add <component-name>
+   ```
+2. Add a `*.stories.tsx` next to the component (use any existing
+   `.stories.tsx` in this folder as a template).
+3. Make sure `pnpm typecheck` passes.
+
+## Conventions
+
+- One component per file under `src/components/ui/`.
+- Components forward refs via `React.ComponentProps<"…">` and never use
+  a hand-written `interface`.
+- Data-slot attributes on the root element (`data-slot="button"`, etc.)
+  so parent components can target them with `[&_[data-slot=...]]`
+  selectors in Tailwind.
+- Tailwind classes only — no separate `.module.css` files.
