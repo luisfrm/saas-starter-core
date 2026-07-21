@@ -10,6 +10,9 @@ node_modules/
 # hecho un `next dev` o `next build` antes, el archivo se creará solo.
 next-env.d.ts
 **/next-env.d.ts
+# TypeScript incremental build info (Next lo genera al transpilar)
+*.tsbuildinfo
+**/*.tsbuildinfo
 
 # Hono / Wrangler build & local state
 .wrangler/
