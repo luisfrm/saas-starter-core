@@ -39,6 +39,26 @@ Son dos tablas, dos enums, dos sistemas de permisos completamente
 separados, aunque algunos nombres de rol se parezcan. Nunca deben
 mezclarse en un mismo chequeo de autorización.
 
+**Modelo de login:** un solo login compartido. La tabla `user` tiene un
+`role` de plataforma (o `null` si no es staff). Un usuario puede ser
+staff de plataforma Y miembro de una o varias organizaciones al mismo
+tiempo — son ortogonales. Cada app filtra después de autenticar:
+
+- `console` → exige `user.role` ∈ {owner, admin, support}. Si no, "sin acceso".
+- `panel` → exige al menos un `member` (rol dentro de una org). Si no, OrgSelector.
+- `public-web` → sesión opcional según el flujo.
+
+**Sin límites de membresía:** un usuario puede pertenecer a N
+organizaciones, y una organización puede tener N miembros. Esto lo
+configura Better Auth en `apps/api-worker/src/lib/auth.ts`.
+
+**Org activa:** Better Auth guarda `session.activeOrganizationId`. El
+`panel` siempre opera sobre esa org (los permisos de org se evalúan
+contra el `member.role` correspondiente). Si el usuario pertenece a
+varias orgs y aún no hay org activa, hay que mostrar un **OrgSelector**
+para que elija — esto se construye cuando inicialicemos `packages/ui`
+con shadcn (ver pendiente abajo).
+
 ## Decisiones de arquitectura y el porqué
 
 | Decisión | Por qué |
@@ -182,6 +202,10 @@ Verificado contra el código (julio 2026). Dos grupos:
       schema de billing existe pero nada cobra
 - [ ] `packages/ui`: correr `npx shadcn@latest init` y elegir componentes
       base (hoy está vacío, sin siquiera `tsconfig.json`)
+- [ ] `OrgSelector` en `panel/`: cuando un usuario pertenece a N
+      organizaciones pero `session.activeOrganizationId` es null,
+      mostrar selector antes de entrar al dashboard. Se construye
+      junto con los componentes de UI (paquete anterior).
 - [ ] CI: no existe `.github/`; mínimo `typecheck` en cada PR
 
 ## Lo que este repo explícitamente NO incluye (a propósito)
