@@ -5,7 +5,10 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./access-control": "./src/access-control.ts"
+    "./access-control": "./src/access-control.ts",
+    "./contracts/*": "./src/contracts/*.ts",
+    "./services/*": "./src/services/*.ts",
+    "./types/*": "./src/types/*.ts"
   },
   "dependencies": {
     "better-auth": "^1.6.23",
