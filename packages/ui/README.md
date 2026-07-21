@@ -76,12 +76,73 @@ src/
     globals.css    ← @import tailwindcss + @theme inline (no tocar)
   components/
     ui/            ← Componentes shadcn (button, card, input, ...)
+    overview.stories.tsx  ← "kitchen sink" usado en Overview/Showcase
+  stories/
+    introduction.mdx      ← MDX introductoria del Storybook
   lib/
     utils.ts       ← cn()
   index.ts         ← re-exports
-postcss.mjs        ← config de Tailwind v4
+.storybook/
+  main.ts          ← builder Vite, addons, globs de stories
+  preview.tsx      ← import de globals.css, decorator withThemeByClassName
+postcss.mjs        ← re-exportable (lo consumen las apps Next via @repo/ui/postcss)
+postcss.config.mjs ← config que Vite autodetecta al buildear Storybook local
 components.json    ← config del CLI de shadcn
 tsconfig.json
+```
+
+## Storybook
+
+Este paquete corre [Storybook 10](https://storybook.js.org/) para
+catalogar los componentes con controles interactivos, autodocs y
+aislamiento real (iframe). Usa `@storybook/react-vite` (no
+`@storybook/nextjs`) porque los componentes son React puro — no usan
+`next/image` ni `next/font`.
+
+Requiere **Node 20.19+ o 22.12+** (ESM-only).
+
+### Comandos
+
+```bash
+pnpm --filter @repo/ui storybook        # dev server en http://localhost:6006
+pnpm --filter @repo/ui build-storybook  # build estático en storybook-static/
+```
+
+### Addons incluidos
+
+- **addons/a11y** — chequeo automático de accesibilidad sobre cada story
+  (basado en axe-core). Errores aparecen en el panel "Accessibility".
+- **addons/themes** — toolbar con toggle **light** ↔ **dark** que agrega
+  la clase correspondiente al `<html>` (mismo mecanismo que
+  `next-themes` en las apps). Implementado con `withThemeByClassName`
+  en `preview.tsx`.
+- **addons/docs** — autodocs (tabla de props autogenerada) + soporte MDX
+  (la intro está en `src/stories/introduction.mdx`).
+
+Los "essentials" (controls, actions, viewport, backgrounds, etc.) ya
+**no son un paquete separado** en Storybook 9+ — pasaron al core. Por
+eso no se listan en `addons` en `main.ts` pero igual funcionan.
+
+### Cómo agregar una story
+
+Al sumar un componente shadcn nuevo (`pnpm dlx shadcn@latest add …`),
+creá un archivo `src/components/ui/<componente>.stories.tsx` al lado
+siguiendo el patrón de los existentes (button.stories.tsx es el más
+completo). Las stories se descubren automáticamente por el glob en
+`.storybook/main.ts`.
+
+Importá los tipos de `@storybook/react-vite` (no de `@storybook/react`,
+que ya no se usa en v10):
+
+```tsx
+import type { Meta, StoryObj } from "@storybook/react-vite"
+import { Button } from "./button"
+
+const meta = { title: "UI/Button", component: Button } satisfies Meta<typeof Button>
+export default meta
+type Story = StoryObj<typeof meta>
+
+export const Primary: Story = { args: { children: "Click me" } }
 ```
 
 ## Detalles importantes

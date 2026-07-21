@@ -232,6 +232,48 @@ Stack instalado:
   u otra, reemplazar el valor en `tokens.css` y configurar
   `next/font` en cada app.
 
+## Storybook (catálogo de componentes)
+
+Catalogamos `packages/ui` con [Storybook 10](https://storybook.js.org/).
+Decisiones que se ven pocos archivos para entender:
+
+- **Builder: `@storybook/react-vite`** (no `@storybook/nextjs`). Los
+  componentes son React puro + Tailwind — no usan `next/image` ni
+  `next/font`, así que el framework pesado de Next no aporta nada y
+  duplicaría el bundler. Vite arranca en ~1s.
+- **Versión**: Storybook 10.5.3 (ESM-only, requiere Node 20.19+ o
+  22.12+). Vite 6 (`@storybook/react-vite@10` admite 5-8; Vite 8
+  funciona pero Rolldown choca con el plugin interno de inyección de
+  exports de Storybook en build, así que se mantiene Vite 6).
+- **Addons**: `addons/a11y` (axe-core en cada story), `addons/themes`
+  (toolbar light/dark que togglean la clase `light`/`dark` en
+  `documentElement` — mismo mecanismo que `next-themes` en las apps),
+  `addons/docs` (autodocs + MDX). Los "essentials" (controls, actions,
+  viewport, backgrounds) ya **no son un paquete**: en v9+ pasaron al
+  core de Storybook, por eso este repo no los lista explícitamente.
+- **Theme switcher en stories**: `preview.tsx` usa
+  `withThemeByClassName({ themes: { light, dark }, parentSelector: "html" })`
+  — toolbar que aplica/quita la clase al `<html>`. En `globals.css`
+  el tema se maneja con `@custom-variant dark (&:is(.dark *))` y los
+  tokens de `.dark` en `tokens.css`. En las apps Next el mismo
+  toggle lo maneja `next-themes`.
+- **Stories co-located**: cada componente lleva su `*.stories.tsx`
+  al lado (`button.stories.tsx`, `card.stories.tsx`, etc.). El glob
+  en `.storybook/main.ts` las descubre automáticamente. Los imports
+  de tipos (`Meta`, `StoryObj`, `Preview`) vienen de
+  `@storybook/react-vite` (no de `@storybook/react`, que ya no se
+  usa). Los `Meta` de MDX vienen de `@storybook/addon-docs/blocks`.
+- **PostCSS local**: `packages/ui/postcss.config.mjs` re-exporta
+  `@tailwindcss/postcss`. Sin esto Vite no encuentra Tailwind al
+  build (las apps Next tienen su propio `postcss.config.mjs` que
+  re-exporta `@repo/ui/postcss`, pero Storybook corre dentro de
+  `packages/ui`, no de la app).
+- **Comandos**:
+  - `pnpm --filter @repo/ui storybook` → dev en `http://localhost:6006`
+  - `pnpm --filter @repo/ui build-storybook` → bundle estático en
+    `storybook-static/` (deployable a Cloudflare Pages, S3, lo que sea).
+- **NO** se commitea `storybook-static/` — está en `.gitignore`.
+
 ## Lo que este repo explícitamente NO incluye (a propósito)
 
 - Chat en tiempo real — no es requisito actual. Si se vuelve prioridad,
