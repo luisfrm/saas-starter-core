@@ -51,10 +51,8 @@ export function createAuth(env: Env) {
         // Las organizaciones las crea un platform admin desde el
         // panel, no el cliente por su cuenta (según lo definido).
         allowUserToCreateOrganization: false,
-        // Ajusta si un usuario cliente puede pertenecer a más de
-        // una organización a la vez.
-        organizationLimit: 1,
-        membershipLimit: 100,
+        // Sin límite: un usuario puede pertenecer a N organizaciones,
+        // y una organización puede tener N miembros.
       }),
     ],
   })
