@@ -274,6 +274,171 @@ Decisiones que se ven pocos archivos para entender:
     `storybook-static/` (deployable a Cloudflare Pages, S3, lo que sea).
 - **NO** se commitea `storybook-static/` — está en `.gitignore`.
 
+## Arquitectura en capas (backend + services de frontend)
+
+El backend usa **Route → Service → Repository**, en funciones
+puras, con dependencias inyectadas por parámetro. Los services
+del frontend viven en `@repo/shared` y se wiren en cada app con
+una línea. El objetivo: que cambiar Hono por otro framework o
+cambiar el shape de un endpoint custom rompa **un solo archivo**
+(contrato Zod), no N.
+
+### Capas del backend (apps/api-worker/src/)
+
+```
+routes/                   ← Hono. Lo ÚNICO que importa hono
+  organizations.route.ts
+  admin-organizations.route.ts
+services/                 ← Lógica de negocio. SIN hono, SIN drizzle
+  organization.service.ts
+repositories/             ← Drizzle. Vacío en el core; aparece
+                            cuando el clon agrega tablas de dominio
+middleware/               ← Guards (requireAuth, requirePlatform*)
+lib/                      ← createAuth, queue, env, db si aplica
+index.ts                  ← Composición: monta sub-routers en rutas
+```
+
+**Regla de oro de las capas:**
+
+- Una `route` puede importar de `service` y de `middleware`. Nunca
+  de otra `route`.
+- Un `service` puede importar de `contracts` (Zod), de la queue,
+  de Better Auth (`auth.api.*`). **Nunca de Hono.** Si un service
+  necesita headers, le llegan como parámetro.
+- Un `repository` (cuando exista) solo importa Drizzle. Los
+  services no llaman Drizzle directo; van por el repository.
+
+**Better Auth ES el repository del dominio auth.** No escribimos
+`UserRepository`/`OrganizationRepository`/`MemberRepository` con
+Drizzle — pelearíamos contra los hooks/validaciones del plugin.
+Los services que tocan `user`/`session`/`organization`/`member`
+llaman `auth.api.*` directamente. Los repositories Drizzle
+existen **solo para tablas de dominio del clon** (pacientes,
+órdenes, productos — lo que se agregue al clonar).
+
+### "Actions" y "Services" conviviendo
+
+- **Service** (módulo con varios métodos del mismo dominio):
+  mejor cuando hay CRUD + queries. Ej. `OrganizationService`.
+- **Action** (función suelta por caso de uso): mejor cuando un
+  flujo orquesta varias cosas (DB + queue + email). Una action
+  puede llamar a un service o a `auth.api.*` directamente.
+  En este repo no hace falta crear un archivo `actions/` todavía
+  — el service de organización ya es chico.
+
+### Instanciación por request
+
+Cloudflare Workers: los bindings/env vars solo existen dentro de
+un request. Por eso `createAuth(env)` y `createDb(url)` se llaman
+**dentro del handler** o en middleware que setea `c.var`, nunca
+en el scope global del módulo. Lo mismo para cualquier service
+con estado: se instancia por request, no a nivel módulo.
+
+```ts
+// routes/admin-organizations.route.ts
+.post("/", requireAuth, ..., async (c) => {
+  const input = createOrganizationSchema.parse(await c.req.json())
+  const organization = await createOrganization(
+    { auth: c.get("auth"), queue: c.env.TASK_QUEUE, headers: c.req.raw.headers },
+    input,
+  )
+  return c.json({ organization })
+})
+```
+
+### Por qué funciones, no clases
+
+- El stack entero es funcional (Hono, Better Auth, Drizzle, Zod).
+  Las clases serían alienígenas.
+- Tree-shaking en Workers: funciones se eliminan individualmente;
+  una clase entera viaja junta.
+- Inyección de dependencias por parámetro da el mismo testeo
+  fácil que un constructor, sin la herencia.
+- Herencia: si al clonar descubrís que escribís CRUD idéntico
+  5 veces, preferí un factory `createCrudRepository(table)` antes
+  que una `BaseRepository` class. Mismo resultado, sin jerarquía.
+
+### Services compartidos del frontend (packages/shared/src/)
+
+```
+contracts/                ← Zod schemas + tipos inferidos
+  organization.ts            createOrganizationSchema,
+                             CreateOrganizationInput, CreateOrganizationResponse
+services/                 ← Funciones puras, sin estado
+  auth.service.ts            createAuthService(authClient) → AuthService
+  session.service.ts         createSessionService(authClient)
+  organization.service.ts    createOrganizationService({ baseUrl })
+types/                    ← Interfaces mínimas para DI
+  auth-client.ts             AuthClientLike (lo que los services esperan)
+```
+
+**Por qué el auth service está en `@repo/shared`:** las 3 apps
+(public-web, panel, console) tienen el mismo `LoginForm`. Sin un
+service compartido, había que escribir el adapter en cada una
+(ya pasó — borramos 3 `auth-adapter.ts`). Con el service,
+cambiar el shape de la respuesta de Better Auth toca **un solo
+archivo**.
+
+**El truco para que sirva a las 3 apps con plugins distintos:**
+`createAuthService(client: AuthClientLike)`. Cada app le pasa su
+client real (que tiene `organizationClient` o `adminClient` según
+corresponda). El service solo toca el subconjunto común
+(`signIn.email`, `signUp.email`, `signIn.social`,
+`requestPasswordReset`).
+
+**Wiring por app** (1 línea de file):
+
+```ts
+// apps/panel/src/lib/services.ts
+import { createAuthService } from "@repo/shared"
+import { authClient } from "./auth-client"
+
+export const authService = createAuthService(authClient)
+```
+
+Las páginas siguen usando `authService` directo:
+
+```tsx
+<LoginForm authClient={authService} redirectUrl="/dashboard" />
+```
+
+El `AuthService` cumple por structural typing la forma que
+esperan los componentes de `@repo/ui` — no hay que tocar los
+componentes.
+
+### Contratos HTTP compartidos (packages/shared/src/contracts/)
+
+Cualquier ruta custom del api-worker (no las de Better Auth, que
+ya las tipa el plugin) define su input/output como Zod schema
+acá. El backend valida con `schema.parse()`, el frontend usa
+`z.infer<typeof schema>` para tipar el service.
+
+**Ejemplo — el único contrato del core:**
+
+```ts
+// packages/shared/src/contracts/organization.ts
+export const createOrganizationSchema = z.object({
+  name: z.string().min(1).max(100),
+  slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/),
+})
+export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>
+```
+
+El backend parsea con este mismo schema. El frontend le pasa
+este mismo tipo. Cambiar el contrato = un solo archivo, ambos
+lados se enteran por typecheck.
+
+### `firstName` / `lastName` — decisión consciente
+
+El `SignupForm` pide `firstName` y `lastName` por separado (mejor
+UX, autocomplete del navegador). El `authService.signUp.email`
+los combina en un único `name: \`${firstName} ${lastName}\``
+antes de pegarle a Better Auth. El backend **no necesita**
+conocer `firstName`/`lastName` como campos de tabla — Better
+Auth ya los ignora salvo que configures `additionalFields` en
+`apps/api-worker/src/lib/auth.ts` + `pnpm auth:generate` + una
+migración. Queda como pendiente documentado.
+
 ## Lo que este repo explícitamente NO incluye (a propósito)
 
 - Chat en tiempo real — no es requisito actual. Si se vuelve prioridad,

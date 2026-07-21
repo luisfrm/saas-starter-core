@@ -19,15 +19,32 @@ Cloudflare Queues/R2 · Turborepo + pnpm workspaces
 ```
 apps/
   api-worker/   Hono en Cloudflare Workers — API + Better Auth      (puerto 8787)
+    src/
+      routes/             Sub-routers Hono (lo único que importa hono)
+      services/           Lógica de negocio (sin hono, sin drizzle)
+      repositories/       Drizzle (vacío en el core; aparece al clonar)
+      middleware/         Guards (requireAuth, requirePlatform*)
+      lib/                createAuth, queue, env
   jobs-worker/  Consumer de Queues — email/PDF/notificaciones      (sin HTTP)
   public-web/   Next.js — cara al cliente final                    (puerto 3000)
   panel/        Next.js — panel de cada organización               (puerto 3001)
   console/      Next.js — panel de tu equipo/plataforma            (puerto 3002)
 packages/
   db/           Schema de Drizzle + cliente de Neon
-  shared/       Roles/permisos (access-control.ts) + tipos compartidos
-  ui/           Componentes compartidos (shadcn)
+  shared/       Access control + tipos + servicios compartidos
+    src/
+      access-control.ts   Roles/permisos de plataforma y organización
+      contracts/          Zod schemas de inputs/outputs HTTP (compartidos)
+      services/           Funciones puras: auth, session, organization
+      types/              Interfaces mínimas para DI (AuthClientLike, etc.)
+  ui/           Componentes compartidos (shadcn + Tailwind v4 + Storybook)
 ```
+
+**Arquitectura por capas:** `Route → Service → Repository`, funciones
+puras, dependencias inyectadas por parámetro. Ver
+**[AGENTS.md → Arquitectura en capas](#)** para el detalle completo
+(por qué no clases, qué pasa con Better Auth como repository, cómo se
+wiren los services de frontend, etc.).
 
 Cada app/package tiene su propio `README.md` con detalle de envs, dev y
 deploy.
