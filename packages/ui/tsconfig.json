@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "outDir": "dist",
+    "paths": {
+      "#components/*": ["./src/components/*.tsx"],
+      "#lib/*": ["./src/lib/*.ts"],
+      "#hooks/*": ["./src/hooks/*.ts"],
+      "#styles/*": ["./src/styles/*.css"]
+    }
+  },
+  "include": ["src"]
+}
