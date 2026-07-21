@@ -8,10 +8,10 @@
     "./access-control": "./src/access-control.ts"
   },
   "dependencies": {
-    "better-auth": "^1.4.0",
-    "zod": "^3.24.0"
+    "better-auth": "^1.6.23",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3"
   }
 }

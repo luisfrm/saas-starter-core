@@ -11,8 +11,8 @@
     "@repo/db": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260719.1",
-    "typescript": "^5.7.0",
-    "wrangler": "^3.99.0"
+    "@cloudflare/workers-types": "^5.20260721.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.112.0"
   }
 }

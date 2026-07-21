@@ -9,16 +9,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.0",
+    "@neondatabase/serverless": "^1.1.0",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",
-    "better-auth": "^1.4.0",
-    "drizzle-orm": "^0.38.0",
-    "hono": "^4.6.0"
+    "better-auth": "^1.6.23",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.31"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260719.1",
-    "typescript": "^5.7.0",
-    "wrangler": "^3.99.0"
+    "@cloudflare/workers-types": "^5.20260721.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.112.0"
   }
 }
