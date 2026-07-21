@@ -43,13 +43,22 @@ extra antes de production.
 ```
 src/
   app/
-    layout.tsx
-    page.tsx     Placeholder — reemplazar con la UI del panel interno
+    layout.tsx     Importa @repo/ui/globals.css + ThemeProvider (next-themes)
+    page.tsx       Placeholder — reemplazar con la UI del panel interno
+  components/
+    theme-provider.tsx
   lib/
     auth-client.ts Better Auth client con adminClient + platformAc
                    (los roles de plataforma) + organizationClient
                    (para listar/gestionar TODAS las organizaciones)
 ```
+
+## Estilos y theming
+
+- Estilos globales: `@repo/ui/globals.css` (importado en `layout.tsx`).
+- Componentes: importar desde `@repo/ui/components/ui/<componente>`.
+- Tokens: editables en `packages/ui/src/styles/tokens.css`.
+- Modo oscuro: vía `next-themes`, default `system`.
 
 ## Detroles importantes
 

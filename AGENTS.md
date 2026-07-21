@@ -200,13 +200,37 @@ Verificado contra el código (julio 2026). Dos grupos:
       `public-web`
 - [ ] Elegir gateway de pago (Stripe u otro) para cobrar `plans` — el
       schema de billing existe pero nada cobra
-- [ ] `packages/ui`: correr `npx shadcn@latest init` y elegir componentes
-      base (hoy está vacío, sin siquiera `tsconfig.json`)
 - [ ] `OrgSelector` en `panel/`: cuando un usuario pertenece a N
       organizaciones pero `session.activeOrganizationId` es null,
-      mostrar selector antes de entrar al dashboard. Se construye
-      junto con los componentes de UI (paquete anterior).
+      mostrar selector antes de entrar al dashboard. Requiere
+      shadcn `select`/`command` (ya hay base para sumarlos).
 - [ ] CI: no existe `.github/`; mínimo `typecheck` en cada PR
+
+## Theming (Tailwind v4 + shadcn)
+
+Stack instalado:
+
+- **Tailwind v4** (CSS-first, sin `tailwind.config.js`) en
+  `packages/ui/src/styles/globals.css`. Cada app Next importa
+  `@repo/ui/globals.css` desde su layout.
+- **shadcn/ui v4** (style `new-york`, base `neutral`) inicializado
+  en `packages/ui` con `components.json`. Los componentes se
+  agregan con:
+  ```bash
+  pnpm --filter @repo/ui dlx shadcn@latest add <componente>
+  ```
+  e importan desde `@repo/ui/components/ui/<componente>`.
+- **Tokens editables** en `packages/ui/src/styles/tokens.css`.
+  Al clonar el repo, este es el ÚNICO archivo de tema que se
+  toca: cambiar los OKLCH de `--primary` y `--secondary` para
+  los colores de marca. `globals.css` los mapea a utilidades
+  de Tailwind (`bg-primary`, `text-muted-foreground`, etc.).
+- **Modo oscuro**: selector `.dark` (via `next-themes`,
+  `defaultTheme: "system"`). Toggle manual se agrega después.
+- **Tipografía**: las 3 familias (`--font-sans/serif/mono`) están
+  como token; actualmente usan system stack. Para usar Geist/Inter
+  u otra, reemplazar el valor en `tokens.css` y configurar
+  `next/font` en cada app.
 
 ## Lo que este repo explícitamente NO incluye (a propósito)
 

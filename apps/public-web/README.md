@@ -44,11 +44,20 @@ solo habla con el api-worker, no toca la base directamente.
 ```
 src/
   app/
-    layout.tsx     Layout raíz
+    layout.tsx     Importa @repo/ui/globals.css + ThemeProvider (next-themes)
     page.tsx       Página de inicio (placeholder — reemplazar)
+  components/
+    theme-provider.tsx
   lib/
     auth-client.ts Better Auth client (solo organizationClient, sin roles)
 ```
+
+## Estilos y theming
+
+- Estilos globales: `@repo/ui/globals.css` (importado en `layout.tsx`).
+- Componentes: importar desde `@repo/ui/components/ui/<componente>`.
+- Tokens: editables en `packages/ui/src/styles/tokens.css`.
+- Modo oscuro: vía `next-themes`, default `system`.
 
 ## Detalles importantes
 
@@ -57,6 +66,4 @@ src/
   miembros de la organización. El chequeo de permisos se hace del
   lado del api-worker con los guards (`requireOrgPermission`).
 - **Stack**: Next.js 15 con App Router, React 19, Turbopack en dev.
-- **Sin shadcn todavía**: `packages/ui` está vacío en este starter.
-  Cuando lo inicialices, los componentes caen ahí y se importan
-  como `@repo/ui/<componente>`.
+- **shadcn**: los componentes viven en `@repo/ui/components/ui/*`.

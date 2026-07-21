@@ -141,10 +141,20 @@ Esto corre, en paralelo (vía Turborepo):
 1. Lee `AGENTS.md` completo
 2. Edita `packages/shared/src/access-control.ts` — agrega los recursos
    y permisos del dominio nuevo (ej: `orders`, `patients`)
-3. Vuelve a correr `auth:generate` si cambiaste algo en los plugins
-4. Agrega tus tablas de dominio en `packages/db/src/schema/`
-5. El resto (auth, roles de plataforma, invitaciones, suscripciones)
+3. Edita `packages/ui/src/styles/tokens.css` — cambia `--primary` y
+   `--secondary` con los OKLCH de los colores de tu marca. El resto
+   del tema (botones, cards, inputs, sombras) se actualiza solo.
+4. Vuelve a correr `auth:generate` si cambiaste algo en los plugins
+5. Agrega tus tablas de dominio en `packages/db/src/schema/`
+6. El resto (auth, roles de plataforma, invitaciones, suscripciones)
    ya funciona sin tocarlo
+
+## Theming
+
+- shadcn + Tailwind v4 ya están inicializados en `packages/ui`.
+- Modo oscuro incluido (selector `.dark` vía `next-themes`).
+- Para agregar componentes: `pnpm --filter @repo/ui dlx shadcn@latest add <componente>`.
+- Detalles en `packages/ui/README.md` y la sección "Theming" de AGENTS.md.
 
 ## Deploy
 
