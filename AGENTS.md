@@ -302,7 +302,7 @@ index.ts                  ← Composición: monta sub-routers en rutas
 
 - Una `route` puede importar de `service` y de `middleware`. Nunca
   de otra `route`.
-- Un `service` puede importar de `contracts` (Zod), de la queue,
+- Un `service` puede importar de `dto/` (Zod), de la queue,
   de Better Auth (`auth.api.*`). **Nunca de Hono.** Si un service
   necesita headers, le llegan como parámetro.
 - Un `repository` (cuando exista) solo importa Drizzle. Los
@@ -361,16 +361,32 @@ con estado: se instancia por request, no a nivel módulo.
 ### Services compartidos del frontend (packages/shared/src/)
 
 ```
-contracts/                ← Zod schemas + tipos inferidos
-  organization.ts            createOrganizationSchema,
+dto/                      ← Zod schemas + tipos inferidos (universal)
+  organization.dto.ts        createOrganizationSchema,
                              CreateOrganizationInput, CreateOrganizationResponse
-services/                 ← Funciones puras, sin estado
-  auth.service.ts            createAuthService(authClient) → AuthService
-  session.service.ts         createSessionService(authClient)
-  organization.service.ts    createOrganizationService({ baseUrl })
-types/                    ← Interfaces mínimas para DI
-  auth-client.ts             AuthClientLike (lo que los services esperan)
+client/                   ← Subpath @repo/shared/client — todo esto
+  lib/                        corre en el navegador.
+    http.ts                   createHttpClient(ofetch) + ApiError
+  services/                 ← Funciones puras, sin estado
+    auth.service.ts            createAuthService(authClient) → AuthService
+    session.service.ts         createSessionService(authClient)
+    organization.service.ts    createOrganizationService({ baseURL })
+  types/                    ← Interfaces mínimas para DI
+    auth-client.ts             AuthClientLike (lo que los services esperan)
 ```
+
+**Reglas del split client/server:**
+
+- El barrel raíz `@repo/shared` re-exporta **solo cosas universales**
+  (dto, access-control) — no arrastra ofetch ni dependencias de
+  cliente a imports de server.
+- Si necesitás un service de frontend, importá explícitamente desde
+  `@repo/shared/client`. Esto deja claro en el código que ese archivo
+  corre en el browser.
+- Los services de backend viven en `apps/api-worker/src/services/`.
+  No se exponen via `@repo/shared` para evitar imports accidentales
+  desde el cliente que terminen bundleando `queue.send()` o
+  `auth.api.*` server-side.
 
 **Por qué el auth service está en `@repo/shared`:** las 3 apps
 (public-web, panel, console) tienen el mismo `LoginForm`. Sin un
@@ -406,27 +422,63 @@ El `AuthService` cumple por structural typing la forma que
 esperan los componentes de `@repo/ui` — no hay que tocar los
 componentes.
 
-### Contratos HTTP compartidos (packages/shared/src/contracts/)
+### DTOs compartidos (packages/shared/src/dto/)
 
 Cualquier ruta custom del api-worker (no las de Better Auth, que
 ya las tipa el plugin) define su input/output como Zod schema
 acá. El backend valida con `schema.parse()`, el frontend usa
 `z.infer<typeof schema>` para tipar el service.
 
-**Ejemplo — el único contrato del core:**
+**Ejemplo — el único DTO del core:**
 
 ```ts
-// packages/shared/src/contracts/organization.ts
+// packages/shared/src/dto/organization.dto.ts
 export const createOrganizationSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/),
 })
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>
+export type CreateOrganizationResponse = { organization: { id: string; name: string; slug: string } }
 ```
 
 El backend parsea con este mismo schema. El frontend le pasa
-este mismo tipo. Cambiar el contrato = un solo archivo, ambos
-lados se enteran por typecheck.
+este mismo tipo. Cambiar el DTO = un solo archivo, ambos lados
+se enteran por typecheck.
+
+### HTTP client (packages/shared/src/client/lib/http.ts)
+
+El cliente HTTP compartido usa **[ofetch](https://github.com/unjs/ofetch)**,
+un wrapper de `fetch` nativo que funciona en navegador, Node y
+Cloudflare Workers sin polyfills. Centraliza:
+
+- `baseURL` configurable
+- Headers dinámicos vía `getHeaders()`
+- Retry automático (default: 1)
+- Timeout (default: 10s)
+- `onRequest` para mergear headers extra (ej. cookies, CSRF)
+- `onResponseError` que normaliza cualquier error HTTP a `ApiError`
+  con `statusCode` y `data` accesibles
+
+```ts
+// packages/shared/src/client/services/organization.service.ts
+import { createHttpClient, type HttpClientOptions } from "../lib/http"
+
+export function createOrganizationService(options: HttpClientOptions) {
+  const http = createHttpClient(options)
+  return {
+    create: async (input: CreateOrganizationInput) => {
+      return http<CreateOrganizationResponse>("/api/admin/organizations", {
+        method: "POST",
+        body: input,
+      })
+    },
+  }
+}
+```
+
+Cada service crea su propio cliente (factory) para permitir
+múltiples bases (ej. api pública vs api interna) sin compartir
+estado accidental.
 
 ### `firstName` / `lastName` — decisión consciente
 

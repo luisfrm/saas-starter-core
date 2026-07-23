@@ -96,7 +96,7 @@ export type OrganizationRole = keyof typeof organizationRoles
 /**
  * NOTA: Better Auth también exporta statements/roles por defecto
  * para ambos plugins (ej. owner/admin/member ya definidos) que
- * puedes importar y fusionar con `...` en vez de redefinir todo
+ * puedes importar y fusionar con `...` en vez de redefinir cada cosa
  * desde cero. El nombre exacto del import puede variar entre
  * versiones — revisa la sección "Access Control" de la doc de
  * cada plugin antes de asumirlo. Aquí se definieron completos

@@ -1,4 +1,4 @@
-import { createAuthService, createSessionService } from "@repo/shared"
+import { createAuthService, createSessionService } from "@repo/shared/client"
 import { authClient } from "./auth-client"
 
 export const authService = createAuthService(authClient)

@@ -1,4 +1,4 @@
-import type { CreateOrganizationInput } from "@repo/shared/contracts/organization"
+import type { CreateOrganizationInput } from "@repo/shared/dto/organization.dto"
 import type { TaskQueueBinding } from "../lib/queue"
 import type { Auth } from "../lib/auth"
 

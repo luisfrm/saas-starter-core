@@ -31,12 +31,14 @@ apps/
   console/      Next.js — panel de tu equipo/plataforma            (puerto 3002)
 packages/
   db/           Schema de Drizzle + cliente de Neon
-  shared/       Access control + tipos + servicios compartidos
+  shared/       Access control + DTOs + servicios compartidos
     src/
-      access-control.ts   Roles/permisos de plataforma y organización
-      contracts/          Zod schemas de inputs/outputs HTTP (compartidos)
-      services/           Funciones puras: auth, session, organization
-      types/              Interfaces mínimas para DI (AuthClientLike, etc.)
+      access-control.ts   Roles/permisos de plataforma y organización (universal)
+      dto/                Zod schemas de inputs/outputs HTTP (universal)
+      client/             Subpath @repo/shared/client — código del navegador
+        lib/http.ts         Cliente HTTP basado en ofetch + ApiError
+        services/          Funciones puras: auth, session, organization
+        types/             Interfaces mínimas para DI (AuthClientLike, etc.)
   ui/           Componentes compartidos (shadcn + Tailwind v4 + Storybook)
 ```
 

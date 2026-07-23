@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { requireAuth } from "../middleware/auth"
 import { requirePlatformPermission } from "../middleware/guards"
 import { createOrganization } from "../services/organization.service"
-import { createOrganizationSchema } from "@repo/shared/contracts/organization"
+import { createOrganizationSchema } from "@repo/shared/dto/organization.dto"
 import type { AppEnv } from "../lib/env"
 
 /**
