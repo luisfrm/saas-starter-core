@@ -1,6 +1,7 @@
 import type { CreateOrganizationInput } from "@repo/shared/dto/organization.dto"
 import type { TaskQueueBinding } from "../lib/queue"
 import type { Auth } from "../lib/auth"
+import { createOrganizationRepository } from "../repositories/organization.repository"
 
 export interface CreateOrganizationDeps {
   auth: Auth
@@ -16,19 +17,23 @@ export interface CreateOrganizationDeps {
  * que cambiar de framework o de event bus no toque este
  * archivo.
  *
- * El "repository" del dominio auth es `auth.api.*` (Better
- * Auth ya gestiona la tabla `organization`). No escribimos
- * un `OrganizationRepository` propio — pelearíamos contra
- * el framework.
+ * Capas:
+ *   service   → orquesta (repository + side effects)
+ *   repository → acceso a datos (Better Auth en este caso)
+ *
+ * El service NO llama a Better Auth directo. Va por el
+ * repository. Si en el futuro agregás un repository Drizzle
+ * propio, solo cambia el repository, no este archivo.
  */
 export async function createOrganization(
   deps: CreateOrganizationDeps,
   input: CreateOrganizationInput,
 ) {
-  const organization = await deps.auth.api.createOrganization({
-    body: { name: input.name, slug: input.slug },
-    headers: deps.headers,
-  })
+  const organizationRepository = createOrganizationRepository(deps.auth)
+  const organization = await organizationRepository.create(
+    { name: input.name, slug: input.slug },
+    deps.headers,
+  )
 
   await deps.queue.send({
     type: "organization.created",

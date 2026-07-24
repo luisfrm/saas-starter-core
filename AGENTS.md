@@ -276,12 +276,16 @@ Decisiones que se ven pocos archivos para entender:
 
 ## Arquitectura en capas (backend + services de frontend)
 
-El backend usa **Route → Service → Repository**, en funciones
-puras, con dependencias inyectadas por parámetro. Los services
-del frontend viven en `@repo/shared` y se wiren en cada app con
-una línea. El objetivo: que cambiar Hono por otro framework o
-cambiar el shape de un endpoint custom rompa **un solo archivo**
-(contrato Zod), no N.
+El backend usa **Route → Service → Repository** en funciones
+puras, con dependencias inyectadas por parámetro. El frontend
+tiene su propia capa de **apiClient + services** dentro de cada
+app (sin cliente HTTP compartido entre apps). El shared
+package solo expone **DTOs y access-control** — nada de
+cliente HTTP ni services de frontend.
+
+El objetivo: que cambiar Hono por otro framework, cambiar el
+cliente HTTP, o cambiar el shape de un endpoint custom rompa
+**un solo archivo** (contrato Zod o client instance), no N.
 
 ### Capas del backend (apps/api-worker/src/)
 
@@ -291,30 +295,78 @@ routes/                   ← Hono. Lo ÚNICO que importa hono
   admin-organizations.route.ts
 services/                 ← Lógica de negocio. SIN hono, SIN drizzle
   organization.service.ts
-repositories/             ← Drizzle. Vacío en el core; aparece
-                            cuando el clon agrega tablas de dominio
-middleware/               ← Guards (requireAuth, requirePlatform*)
-lib/                      ← createAuth, queue, env, db si aplica
+repositories/             ← Acceso a datos. Sin hono, sin lógica de negocio
+  organization.repository.ts
+lib/                      ← Helpers: createAuth, queue, env, route-handler
+  route-handler.ts          Wrappers withAuth(module, action) y withSession()
+  auth.ts
+  queue.ts
+  env.ts
 index.ts                  ← Composición: monta sub-routers en rutas
 ```
 
 **Regla de oro de las capas:**
 
-- Una `route` puede importar de `service` y de `middleware`. Nunca
-  de otra `route`.
+- Una `route` puede importar de `service`, `lib/route-handler`,
+  y `dto/`. Nunca de otra `route`.
 - Un `service` puede importar de `dto/` (Zod), de la queue,
-  de Better Auth (`auth.api.*`). **Nunca de Hono.** Si un service
-  necesita headers, le llegan como parámetro.
-- Un `repository` (cuando exista) solo importa Drizzle. Los
-  services no llaman Drizzle directo; van por el repository.
+  de repositories, y de tipos Better Auth. **Nunca de Hono.**
+  Si un service necesita headers, le llegan como parámetro.
+- Un `repository` solo importa Drizzle (o llama a `auth.api.*`
+  cuando Better Auth es el "data access layer" del dominio
+  auth). Los services no llaman Drizzle ni `auth.api.*` directo;
+  van por el repository.
 
 **Better Auth ES el repository del dominio auth.** No escribimos
 `UserRepository`/`OrganizationRepository`/`MemberRepository` con
 Drizzle — pelearíamos contra los hooks/validaciones del plugin.
-Los services que tocan `user`/`session`/`organization`/`member`
-llaman `auth.api.*` directamente. Los repositories Drizzle
-existen **solo para tablas de dominio del clon** (pacientes,
-órdenes, productos — lo que se agregue al clonar).
+Los repositories Drizzle existen **solo para tablas de dominio
+del clon** (pacientes, órdenes, productos — lo que se agregue
+al clonar).
+
+### Wrappers de auth (apps/api-worker/src/lib/route-handler.ts)
+
+Encapsula la autenticación, extracción de `organizationId` y
+validación de permisos. Equivalente funcional a los
+`withAuth(module, action)` de Next.js App Router, pero como
+middlewares de Hono.
+
+```ts
+// routes/admin-organizations.route.ts
+.post("/",
+  withAuth("organization", "create", { scope: "platform" }),
+  async (c) => {
+    const input = createOrganizationSchema.parse(await c.req.json())
+    const organization = await createOrganization(
+      { auth: c.get("auth"), queue: c.env.TASK_QUEUE, headers: c.req.raw.headers },
+      input,
+    )
+    return c.json({ organization })
+  },
+)
+```
+
+Funciones exportadas:
+
+- `withSession()` — exige sesión activa, carga `c.var.session` y `c.var.user`. 401 si falta.
+- `withAuth(module, action, { scope: "platform" | "organization" })` — sesión + permiso.
+  - `scope: "platform"` → usa `auth.api.userHasPermission` (rol de plataforma).
+  - `scope: "organization"` → usa `auth.api.hasPermission` (resuelve orgId de `:orgId` o de `session.activeOrganizationId`).
+- `platformRoleHas` / `platformStatementHas` / `orgStatementHas` — peek helpers
+  para usar dentro de un handler cuando querés chequear sin cortar el flujo.
+
+### Multi-tenancy en repositories
+
+**Regla:** cualquier query a una tabla de dominio del proyecto
+clonado DEBE incluir `WHERE organizationId = ?` con el
+`organizationId` del contexto. Nunca `SELECT * FROM tabla` sin
+filtro — eso rompe el aislamiento entre organizaciones.
+
+En este starter, el único repository es `organization.repository.ts`,
+que delega a `auth.api.createOrganization` (Better Auth es el
+DAL para ese dominio). Al agregar tablas propias (ej. `orders`,
+`patients`), el repository correspondiente usa Drizzle y filtra
+siempre por `organizationId`.
 
 ### "Actions" y "Services" conviviendo
 
@@ -322,7 +374,7 @@ existen **solo para tablas de dominio del clon** (pacientes,
   mejor cuando hay CRUD + queries. Ej. `OrganizationService`.
 - **Action** (función suelta por caso de uso): mejor cuando un
   flujo orquesta varias cosas (DB + queue + email). Una action
-  puede llamar a un service o a `auth.api.*` directamente.
+  puede llamar a un service o a un repository directamente.
   En este repo no hace falta crear un archivo `actions/` todavía
   — el service de organización ya es chico.
 
@@ -336,7 +388,7 @@ con estado: se instancia por request, no a nivel módulo.
 
 ```ts
 // routes/admin-organizations.route.ts
-.post("/", requireAuth, ..., async (c) => {
+.post("/", withAuth("organization", "create", { scope: "platform" }), async (c) => {
   const input = createOrganizationSchema.parse(await c.req.json())
   const organization = await createOrganization(
     { auth: c.get("auth"), queue: c.env.TASK_QUEUE, headers: c.req.raw.headers },
@@ -358,69 +410,72 @@ con estado: se instancia por request, no a nivel módulo.
   5 veces, preferí un factory `createCrudRepository(table)` antes
   que una `BaseRepository` class. Mismo resultado, sin jerarquía.
 
-### Services compartidos del frontend (packages/shared/src/)
+### Capa de cliente del frontend (apps/<app>/src/lib/)
+
+Cada app Next.js tiene su propia capa de cliente HTTP y
+servicios, sin código compartido con las otras apps:
 
 ```
-dto/                      ← Zod schemas + tipos inferidos (universal)
-  organization.dto.ts        createOrganizationSchema,
-                             CreateOrganizationInput, CreateOrganizationResponse
-client/                   ← Subpath @repo/shared/client — todo esto
-  lib/                        corre en el navegador.
-    http.ts                   createHttpClient(ofetch) + ApiError
-  services/                 ← Funciones puras, sin estado
-    auth.service.ts            createAuthService(authClient) → AuthService
-    session.service.ts         createSessionService(authClient)
-    organization.service.ts    createOrganizationService({ baseURL })
-  types/                    ← Interfaces mínimas para DI
-    auth-client.ts             AuthClientLike (lo que los services esperan)
+apps/<app>/src/lib/
+  api-client.ts           ← axios instance con withCredentials + interceptors
+  auth-client.ts          ← Better Auth client con plugins específicos
+  services/               ← Capa de servicios de la app
+    index.ts                Wiring point: instancia apiClient, authService, etc.
+    auth.service.ts         createAuthService(authClient) → AuthService
+    session.service.ts      createSessionService(authClient)
+    organization.service.ts createOrganizationService(apiClient) → usa axios
 ```
 
-**Reglas del split client/server:**
+**Por qué no compartir el `apiClient` entre apps:** cada app
+tiene su propio `baseURL`, su `onRedirect` (router de Next.js
+vs window.location), y sus headers. Compartir el cliente
+acopla decisiones que no son compartidas. Los DTOs y
+permisos SÍ se comparten vía `@repo/shared`.
 
-- El barrel raíz `@repo/shared` re-exporta **solo cosas universales**
-  (dto, access-control) — no arrastra ofetch ni dependencias de
-  cliente a imports de server.
-- Si necesitás un service de frontend, importá explícitamente desde
-  `@repo/shared/client`. Esto deja claro en el código que ese archivo
-  corre en el browser.
-- Los services de backend viven en `apps/api-worker/src/services/`.
-  No se exponen via `@repo/shared` para evitar imports accidentales
-  desde el cliente que terminen bundleando `queue.send()` o
-  `auth.api.*` server-side.
+**`apiClient` (axios) — características:**
 
-**Por qué el auth service está en `@repo/shared`:** las 3 apps
-(public-web, panel, console) tienen el mismo `LoginForm`. Sin un
-service compartido, había que escribir el adapter en cada una
-(ya pasó — borramos 3 `auth-adapter.ts`). Con el service,
-cambiar el shape de la respuesta de Better Auth toca **un solo
-archivo**.
+- `withCredentials: true` → envía la cookie de sesión HTTP-Only
+  de Better Auth automáticamente.
+- Interceptor de respuesta: si llega 401 o 404 sobre un endpoint
+  que requiere organización activa, llama a `onRedirect` con
+  el path configurado (default `/login`). Centraliza la lógica
+  de "sesión vencida" o "sin org activa" en un solo lugar.
+- Errores HTTP se normalizan a `ApiError` con `statusCode` y
+  `data` accesibles.
 
-**El truco para que sirva a las 3 apps con plugins distintos:**
-`createAuthService(client: AuthClientLike)`. Cada app le pasa su
-client real (que tiene `organizationClient` o `adminClient` según
-corresponda). El service solo toca el subconjunto común
-(`signIn.email`, `signUp.email`, `signIn.social`,
-`requestPasswordReset`).
+**`createAuthService` y `createSessionService` — particularidad:**
 
-**Wiring por app** (1 línea de file):
+Estos NO usan axios — Better Auth expone su propio client
+(que ya está configurado con los plugins específicos de cada
+app: `organizationClient`, `adminClient`, etc.) y maneja las
+rutas `/api/auth/*` internamente. El wrapper solo normaliza
+`{ data, error }` a `{ error: { message } | null }` para que
+los componentes de `@repo/ui` tengan una forma estable.
+
+**Wiring por app** (`services/index.ts`):
 
 ```ts
-// apps/panel/src/lib/services.ts
-import { createAuthService } from "@repo/shared"
-import { authClient } from "./auth-client"
+// apps/panel/src/lib/services/index.ts
+import { authClient } from "../auth-client"
+import { createApiClient } from "../api-client"
+import { createAuthService } from "./auth.service"
+import { createOrganizationService } from "./organization.service"
+import { createSessionService } from "./session.service"
 
+export const apiClient = createApiClient({
+  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "",
+})
 export const authService = createAuthService(authClient)
+export const sessionService = createSessionService(authClient)
+export const organizationService = createOrganizationService(apiClient)
 ```
 
-Las páginas siguen usando `authService` directo:
+Las páginas consumen las instancias directo:
 
 ```tsx
+import { authService } from "@/lib/services"
 <LoginForm authClient={authService} redirectUrl="/dashboard" />
 ```
-
-El `AuthService` cumple por structural typing la forma que
-esperan los componentes de `@repo/ui` — no hay que tocar los
-componentes.
 
 ### DTOs compartidos (packages/shared/src/dto/)
 
@@ -444,41 +499,6 @@ export type CreateOrganizationResponse = { organization: { id: string; name: str
 El backend parsea con este mismo schema. El frontend le pasa
 este mismo tipo. Cambiar el DTO = un solo archivo, ambos lados
 se enteran por typecheck.
-
-### HTTP client (packages/shared/src/client/lib/http.ts)
-
-El cliente HTTP compartido usa **[ofetch](https://github.com/unjs/ofetch)**,
-un wrapper de `fetch` nativo que funciona en navegador, Node y
-Cloudflare Workers sin polyfills. Centraliza:
-
-- `baseURL` configurable
-- Headers dinámicos vía `getHeaders()`
-- Retry automático (default: 1)
-- Timeout (default: 10s)
-- `onRequest` para mergear headers extra (ej. cookies, CSRF)
-- `onResponseError` que normaliza cualquier error HTTP a `ApiError`
-  con `statusCode` y `data` accesibles
-
-```ts
-// packages/shared/src/client/services/organization.service.ts
-import { createHttpClient, type HttpClientOptions } from "../lib/http"
-
-export function createOrganizationService(options: HttpClientOptions) {
-  const http = createHttpClient(options)
-  return {
-    create: async (input: CreateOrganizationInput) => {
-      return http<CreateOrganizationResponse>("/api/admin/organizations", {
-        method: "POST",
-        body: input,
-      })
-    },
-  }
-}
-```
-
-Cada service crea su propio cliente (factory) para permitir
-múltiples bases (ej. api pública vs api interna) sin compartir
-estado accidental.
 
 ### `firstName` / `lastName` — decisión consciente
 

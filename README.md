@@ -22,31 +22,45 @@ apps/
     src/
       routes/             Sub-routers Hono (lo único que importa hono)
       services/           Lógica de negocio (sin hono, sin drizzle)
-      repositories/       Drizzle (vacío en el core; aparece al clonar)
-      middleware/         Guards (requireAuth, requirePlatform*)
-      lib/                createAuth, queue, env
+      repositories/       Acceso a datos (Drizzle o auth.api.*)
+      lib/                createAuth, queue, env, route-handler (withAuth/withSession)
   jobs-worker/  Consumer de Queues — email/PDF/notificaciones      (sin HTTP)
   public-web/   Next.js — cara al cliente final                    (puerto 3000)
+    src/lib/
+      api-client.ts         axios instance (withCredentials + interceptors)
+      auth-client.ts        Better Auth client (organizationClient)
+      services/             auth, session, organization (de la app)
   panel/        Next.js — panel de cada organización               (puerto 3001)
+    src/lib/
+      api-client.ts         axios instance (withCredentials + interceptors)
+      auth-client.ts        Better Auth client (organizationClient + org AC)
+      services/             auth, session, organization (de la app)
   console/      Next.js — panel de tu equipo/plataforma            (puerto 3002)
+    src/lib/
+      api-client.ts         axios instance (withCredentials + interceptors)
+      auth-client.ts        Better Auth client (adminClient + platform AC)
+      services/             auth, session (de la app)
 packages/
   db/           Schema de Drizzle + cliente de Neon
-  shared/       Access control + DTOs + servicios compartidos
+  shared/       Solo tipos y permisos (universal)
     src/
-      access-control.ts   Roles/permisos de plataforma y organización (universal)
-      dto/                Zod schemas de inputs/outputs HTTP (universal)
-      client/             Subpath @repo/shared/client — código del navegador
-        lib/http.ts         Cliente HTTP basado en ofetch + ApiError
-        services/          Funciones puras: auth, session, organization
-        types/             Interfaces mínimas para DI (AuthClientLike, etc.)
+      access-control.ts   Roles/permisos de plataforma y organización
+      dto/                Zod schemas de inputs/outputs HTTP
   ui/           Componentes compartidos (shadcn + Tailwind v4 + Storybook)
 ```
 
-**Arquitectura por capas:** `Route → Service → Repository`, funciones
-puras, dependencias inyectadas por parámetro. Ver
-**[AGENTS.md → Arquitectura en capas](#)** para el detalle completo
-(por qué no clases, qué pasa con Better Auth como repository, cómo se
-wiren los services de frontend, etc.).
+**Arquitectura por capas:**
+- **Backend:** `Route → Service → Repository` en `apps/api-worker`, funciones
+  puras, dependencias inyectadas por parámetro. Auth+perms vía
+  `withAuth(module, action)` y `withSession()` en `lib/route-handler.ts`.
+- **Frontend:** cada app tiene su propio `apiClient` (axios) y sus
+  propios `services/` en `src/lib/`. No hay cliente HTTP ni services
+  compartidos entre apps. Los **DTOs y access-control** sí se
+  comparten vía `@repo/shared`.
+
+Ver **[AGENTS.md → Arquitectura en capas](#)** para el detalle completo
+(por qué no clases, qué pasa con Better Auth como repository, multi-tenancy
+en repositories, etc.).
 
 Cada app/package tiene su propio `README.md` con detalle de envs, dev y
 deploy.

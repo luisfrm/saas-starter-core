@@ -11,6 +11,7 @@
   "dependencies": {
     "@repo/shared": "workspace:*",
     "@repo/ui": "workspace:*",
+    "axios": "^1.18.1",
     "better-auth": "^1.6.23",
     "lucide-react": "^1.25.0",
     "next": "^16.2.10",

@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { requireAuth } from "../middleware/auth"
+import { withSession } from "../lib/route-handler"
 import type { AppEnv } from "../lib/env"
 
 /**
@@ -13,6 +13,6 @@ import type { AppEnv } from "../lib/env"
  */
 export const organizationRoutes = new Hono<AppEnv>().get(
   "/me",
-  requireAuth,
+  withSession(),
   (c) => c.json({ session: c.get("session"), user: c.get("user") }),
 )
