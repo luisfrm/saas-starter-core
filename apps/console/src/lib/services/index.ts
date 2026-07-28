@@ -12,14 +12,16 @@
 // de Better Auth no se comparten entre apps porque cada una tiene
 // un client con plugins distintos.
 //
-// console (panel de plataforma) NO expone `organizationService`
-// porque las operaciones de admin sobre organizaciones se hacen
-// directamente via Better Auth admin client (`authClient.organization.*`),
-// no contra las rutas custom del api-worker.
+// console (panel de plataforma) es la ÚNICA app que expone
+// `organizationService`: la creación de organizaciones es una
+// operación de plataforma (`POST /api/admin/organizations`,
+// permiso `organization:create`) y el api-worker dispara el
+// evento `organization.created` a la cola desde esa ruta.
 
 import { authClient } from "../auth-client"
 import { createApiClient } from "../api-client"
 import { createAuthService } from "./auth.service"
+import { createOrganizationService } from "./organization.service"
 import { createSessionService } from "./session.service"
 
 export const apiClient = createApiClient({
@@ -28,3 +30,4 @@ export const apiClient = createApiClient({
 
 export const authService = createAuthService(authClient)
 export const sessionService = createSessionService(authClient)
+export const organizationService = createOrganizationService(apiClient)

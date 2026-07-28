@@ -1,4 +1,4 @@
-import { createAuthClient } from "better-auth/client"
+import { createAuthClient } from "better-auth/react"
 import { organizationClient } from "better-auth/client/plugins"
 import { organizationAc, organizationRoles } from "@repo/shared/access-control"
 

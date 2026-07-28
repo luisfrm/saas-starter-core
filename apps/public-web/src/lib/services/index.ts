@@ -15,7 +15,6 @@
 import { authClient } from "../auth-client"
 import { createApiClient } from "../api-client"
 import { createAuthService } from "./auth.service"
-import { createOrganizationService } from "./organization.service"
 import { createSessionService } from "./session.service"
 
 export const apiClient = createApiClient({
@@ -24,4 +23,3 @@ export const apiClient = createApiClient({
 
 export const authService = createAuthService(authClient)
 export const sessionService = createSessionService(authClient)
-export const organizationService = createOrganizationService(apiClient)
