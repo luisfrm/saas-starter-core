@@ -137,38 +137,71 @@ El equivalente directo de `@UseGuards()` en Nest:
 
 ```ts
 app.post("/api/admin/organizations",
-  requireAuth,                                            // 401 sin sesión
-  requirePlatformPermission({ organization: ["create"] }), // 403 sin permiso
+  requirePlatformPermission("organization", "create"), // 401 sin sesión, 403 sin permiso
   async (c) => { /* handler limpio */ }
 )
 ```
 
-**Guards disponibles en `apps/api-worker/src/middleware/`:**
+**Guards disponibles en `apps/api-worker/src/lib/route-handler.ts`:**
 
 | Guard | Pregunta | Cómo decide | Costo |
 |---|---|---|---|
-| `requireAuth` | ¿Hay sesión? | `auth.api.getSession` | 1 round-trip a Neon |
-| `requirePlatformPermission(perms)` | ¿El rol de **plataforma** del usuario incluye este permiso? | `auth.api.userHasPermission` (plugin `admin`) | 1 round-trip (chequeo en memoria después) |
-| `requirePlatformRole(...roles)` | ¿El usuario tiene uno de estos roles de plataforma? | Lee `session.user.role` (sin llamada) | Gratis |
-| `requireOrgPermission(perms)` | ¿El rol de **organización** del usuario incluye este permiso? | `auth.api.hasPermission` (plugin `organization`) | 1 round-trip a Neon (resuelve member) |
+| `requireAuth()` | ¿Hay sesión? | Lee `c.var.session` (cargada por el middleware global de `index.ts`) | Gratis |
+| `requirePlatformPermission(module, action)` | ¿El rol de **plataforma** del usuario incluye este permiso? | `auth.api.userHasPermission` (plugin `admin`) | 1 round-trip (chequeo en memoria después) |
+| `requireOrgPermission(module, action)` | ¿El rol de **organización** del usuario incluye este permiso? | `auth.api.hasPermission` (plugin `organization`) | 1 round-trip a Neon (resuelve member) |
 
 **Reglas:**
 
-- `requireAuth` va **siempre primero**; los demás lo asumen.
+- La sesión la carga el **middleware global** de `index.ts`
+  (`auth.api.getSession` por request, 1 round-trip). Los guards solo
+  la leen de `c.var` — no la piden de nuevo.
+- Cada guard chequea sesión inline. NUNCA componer un middleware
+  llamando a otro con el mismo `next` (ej. `await requireAuth()(c, next)`):
+  eso ejecuta el handler ANTES del chequeo de permisos.
+- `auth.api.hasPermission` y `auth.api.userHasPermission` devuelven
+  `{ success: boolean }`, NO un booleano — chequear siempre `.success`.
+  Ambas lanzan `APIError` (sesión inválida, no-miembro, sin org
+  activa): los guards la mapean a 401/403, nunca propagar como 500.
 - Para org-scoped, el guard busca `:orgId` en los params de la ruta; si
-  no está, usa `session.activeOrganizationId`.
-- Mejor Auth expone dos APIs distintas: `userHasPermission` (plataforma,
+  no está, usa `session.activeOrganizationId`. Sin ninguno → 403.
+- Better Auth expone dos APIs distintas: `userHasPermission` (plataforma,
   plugin `admin`) y `hasPermission` (organización, plugin `organization`).
   No las mezcles. Las firmas exactas se verificaron contra
-  `better-auth@1.6.23` (la instalada) — ver `apps/api-worker/src/middleware/guards.ts`.
+  `better-auth@1.6.23` (la instalada) — ver `apps/api-worker/src/lib/route-handler.ts`.
+- Para chequear un rol de plataforma sin permiso granular, usa el peek
+  helper `platformRoleHas(roles, user)` dentro del handler (gratis, sin
+  llamada a la base).
+
+## Errores del API (envelope único)
+
+`app.onError` en `apps/api-worker/src/lib/errors.ts` mapea todo a
+`{ error: string, details?: unknown }`:
+
+| Excepción | Status | Detalle |
+|---|---|---|
+| `ZodError` (input inválido) | 400 | `issues` de Zod |
+| `APIError` de Better Auth | su statusCode real | `err.body` |
+| `HTTPException` de Hono | su status | — |
+| cualquier otra | 500 | logueada, sin filtrar internals |
+
+Las rutas validan input con `zValidator("json", schema, hook)` de
+`@hono/zod-validator`; el hook relanza el `ZodError` para que el
+`onError` global lo formatee (un solo punto de mapeo). El handler
+lee el input ya tipado con `c.req.valid("json")`. El `ApiError` del
+frontend expone este envelope en `error.data`.
+
+## CORS del api-worker
+
+`apps/api-worker/src/lib/cors.ts` exporta `ALLOWED_ORIGINS` (lista
+HARDCODEADA de los puertos dev de las 3 apps Next) y `corsMiddleware`
+(hono/cors con `credentials: true`) montado en `/api/*`. La MISMA
+lista alimenta `trustedOrigins` de Better Auth en `lib/auth.ts` —
+sin `trustedOrigins`, Better Auth rechaza sign-in/sign-up cross-origin.
+Al agregar una app o un dominio de producción, editar esa lista y
+redeploy.
 
 ## Gotchas que no se ven leyendo un solo archivo
 
-- El contrato de eventos de la cola está **duplicado a mano**:
-  `apps/api-worker/src/lib/queue.ts` define `QueueEvent` y
-  `apps/jobs-worker/src/index.ts` lo **redefine** en vez de importarlo.
-  Agregar/cambiar un evento exige editar ambos archivos o el producer
-  y el consumer se desincronizan sin error de tipos.
 - `drizzle/` (las migraciones generadas) está en `.gitignore` — hoy las
   migraciones no se commitean. Si eso no es intencional a largo plazo,
   revísalo al clonar.
@@ -177,7 +210,14 @@ app.post("/api/admin/organizations",
   la base real no tiene las tablas completas de Better Auth.
 - Los 3 frontends tienen `auth-client.ts` distintos a propósito:
   `public-web` sin roles, `panel` con `organizationAc`, `console` con
-  `adminClient` + `platformAc`. No los "unifiques".
+  `adminClient` + `platformAc`. No los "unifiques". Los tres importan
+  `createAuthClient` desde `better-auth/react` (no `better-auth/client`)
+  para que `useSession` sea un hook de React real y no un nanostore Atom.
+- El email de bienvenida se dispara desde `databaseHooks.user.create.after`
+  en `lib/auth.ts` (no desde una ruta custom) — así cubre sign-up,
+  invitación a org y alta por admin. El reset de contraseña va por
+  `emailAndPassword.sendResetPassword`. Ambos publican a `TASK_QUEUE`;
+  los templates de Resend están en `apps/jobs-worker/src/index.ts`.
 
 ## Qué falta / próximos pasos conocidos
 
@@ -298,11 +338,13 @@ services/                 ← Lógica de negocio. SIN hono, SIN drizzle
 repositories/             ← Acceso a datos. Sin hono, sin lógica de negocio
   organization.repository.ts
 lib/                      ← Helpers: createAuth, queue, env, route-handler
-  route-handler.ts          Wrappers withAuth(module, action) y withSession()
+  route-handler.ts          Guards requireAuth / requirePlatformPermission / requireOrgPermission
+  cors.ts                   ALLOWED_ORIGINS (hardcoded) + corsMiddleware
+  errors.ts                 app.onError → envelope { error, details? }
   auth.ts
   queue.ts
   env.ts
-index.ts                  ← Composición: monta sub-routers en rutas
+index.ts                  ← Composición: CORS, sesión global, onError, monta sub-routers
 ```
 
 **Regla de oro de las capas:**
@@ -324,19 +366,20 @@ Los repositories Drizzle existen **solo para tablas de dominio
 del clon** (pacientes, órdenes, productos — lo que se agregue
 al clonar).
 
-### Wrappers de auth (apps/api-worker/src/lib/route-handler.ts)
+### Guards de auth (apps/api-worker/src/lib/route-handler.ts)
 
 Encapsula la autenticación, extracción de `organizationId` y
 validación de permisos. Equivalente funcional a los
-`withAuth(module, action)` de Next.js App Router, pero como
+middlewares de autorización de Next.js App Router, pero como
 middlewares de Hono.
 
 ```ts
 // routes/admin-organizations.route.ts
 .post("/",
-  withAuth("organization", "create", { scope: "platform" }),
+  requirePlatformPermission("organization", "create"),
+  zValidator("json", createOrganizationSchema, (r) => { if (!r.success) throw r.error }),
   async (c) => {
-    const input = createOrganizationSchema.parse(await c.req.json())
+    const input = c.req.valid("json")
     const organization = await createOrganization(
       { auth: c.get("auth"), queue: c.env.TASK_QUEUE, headers: c.req.raw.headers },
       input,
@@ -348,10 +391,13 @@ middlewares de Hono.
 
 Funciones exportadas:
 
-- `withSession()` — exige sesión activa, carga `c.var.session` y `c.var.user`. 401 si falta.
-- `withAuth(module, action, { scope: "platform" | "organization" })` — sesión + permiso.
-  - `scope: "platform"` → usa `auth.api.userHasPermission` (rol de plataforma).
-  - `scope: "organization"` → usa `auth.api.hasPermission` (resuelve orgId de `:orgId` o de `session.activeOrganizationId`).
+- `requireAuth()` — exige sesión activa (ya cargada por el middleware
+  global). 401 si falta.
+- `requirePlatformPermission(module, action)` — sesión + permiso de
+  plataforma (`auth.api.userHasPermission`).
+- `requireOrgPermission(module, action)` — sesión + permiso de
+  organización (`auth.api.hasPermission`; resuelve orgId de `:orgId`
+  o de `session.activeOrganizationId`).
 - `platformRoleHas` / `platformStatementHas` / `orgStatementHas` — peek helpers
   para usar dentro de un handler cuando querés chequear sin cortar el flujo.
 
@@ -388,8 +434,8 @@ con estado: se instancia por request, no a nivel módulo.
 
 ```ts
 // routes/admin-organizations.route.ts
-.post("/", withAuth("organization", "create", { scope: "platform" }), async (c) => {
-  const input = createOrganizationSchema.parse(await c.req.json())
+.post("/", requirePlatformPermission("organization", "create"), async (c) => {
+  const input = c.req.valid("json")
   const organization = await createOrganization(
     { auth: c.get("auth"), queue: c.env.TASK_QUEUE, headers: c.req.raw.headers },
     input,
@@ -418,12 +464,12 @@ servicios, sin código compartido con las otras apps:
 ```
 apps/<app>/src/lib/
   api-client.ts           ← axios instance con withCredentials + interceptors
-  auth-client.ts          ← Better Auth client con plugins específicos
+  auth-client.ts          ← Better Auth client (better-auth/react) con plugins específicos
   services/               ← Capa de servicios de la app
     index.ts                Wiring point: instancia apiClient, authService, etc.
     auth.service.ts         createAuthService(authClient) → AuthService
     session.service.ts      createSessionService(authClient)
-    organization.service.ts createOrganizationService(apiClient) → usa axios
+    organization.service.ts createOrganizationService(apiClient) → SOLO en console
 ```
 
 **Por qué no compartir el `apiClient` entre apps:** cada app
@@ -436,10 +482,12 @@ permisos SÍ se comparten vía `@repo/shared`.
 
 - `withCredentials: true` → envía la cookie de sesión HTTP-Only
   de Better Auth automáticamente.
-- Interceptor de respuesta: si llega 401 o 404 sobre un endpoint
-  que requiere organización activa, llama a `onRedirect` con
-  el path configurado (default `/login`). Centraliza la lógica
-  de "sesión vencida" o "sin org activa" en un solo lugar.
+- Interceptor de respuesta: si llega 401 (sesión expirada o cookie
+  inválida), llama a `onRedirect` con el path configurado (default
+  `/login`, default redirect: `window.location.href`). Centraliza
+  la lógica de "sesión vencida" en un solo lugar. Los 404 NO
+  redirigen: un recurso no encontrado es caso de negocio, no de
+  sesión.
 - Errores HTTP se normalizan a `ApiError` con `statusCode` y
   `data` accesibles.
 
@@ -455,7 +503,7 @@ los componentes de `@repo/ui` tengan una forma estable.
 **Wiring por app** (`services/index.ts`):
 
 ```ts
-// apps/panel/src/lib/services/index.ts
+// apps/console/src/lib/services/index.ts
 import { authClient } from "../auth-client"
 import { createApiClient } from "../api-client"
 import { createAuthService } from "./auth.service"
@@ -467,9 +515,14 @@ export const apiClient = createApiClient({
 })
 export const authService = createAuthService(authClient)
 export const sessionService = createSessionService(authClient)
+// SOLO console: crear organizaciones es operación de plataforma
 export const organizationService = createOrganizationService(apiClient)
 ```
 
+`panel` y `public-web` exportan los mismos services EXCEPTO
+`organizationService` — sus usuarios (miembros de org / clientes
+finales) recibirían 403 de `/api/admin/organizations`, que es una
+ruta de plataforma.
 Las páginas consumen las instancias directo:
 
 ```tsx
@@ -481,8 +534,9 @@ import { authService } from "@/lib/services"
 
 Cualquier ruta custom del api-worker (no las de Better Auth, que
 ya las tipa el plugin) define su input/output como Zod schema
-acá. El backend valida con `schema.parse()`, el frontend usa
-`z.infer<typeof schema>` para tipar el service.
+acá. El backend valida con `zValidator("json", schema)` (más
+`@hono/zod-validator`), el frontend usa `z.infer<typeof schema>`
+para tipar el service.
 
 **Ejemplo — el único DTO del core:**
 
