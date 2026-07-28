@@ -14,3 +14,5 @@ export * from "./access-control"
 // y frontends. Cambiar un DTO = cambiar un solo archivo; ambos lados
 // se enteran por typecheck.
 export * from "./dto/organization.dto"
+export * from "./dto/pagination.dto"
+

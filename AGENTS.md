@@ -505,12 +505,12 @@ los componentes de `@repo/ui` tengan una forma estable.
 ```ts
 // apps/console/src/lib/services/index.ts
 import { authClient } from "../auth-client"
-import { createApiClient } from "../api-client"
+import { apiClient } from "../api-client"
 import { createAuthService } from "./auth.service"
 import { createOrganizationService } from "./organization.service"
 import { createSessionService } from "./session.service"
 
-export const apiClient = createApiClient({
+export const apiClient = apiClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "",
 })
 export const authService = createAuthService(authClient)

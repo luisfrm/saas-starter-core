@@ -1,10 +1,8 @@
-import axios, { type AxiosError, type AxiosInstance } from "axios"
+import { ofetch } from "ofetch"
 
 /**
- * Error normalizado para cualquier falla HTTP del api-worker.
- * Conserva el `statusCode` y el cuerpo crudo de la respuesta para
- * que los services puedan mostrar mensajes específicos o hacer
- * fallbacks según el código.
+ * Normalized error wrapper for any HTTP failure from api-worker.
+ * Preserves statusCode and raw response data for downstream services.
  */
 export class ApiError extends Error {
   constructor(
@@ -18,45 +16,24 @@ export class ApiError extends Error {
 }
 
 export interface ApiClientOptions {
-  /** URL base del api-worker. Leída de NEXT_PUBLIC_API_URL. */
+  /** Base URL for api-worker. Read from NEXT_PUBLIC_API_URL. */
   baseURL: string
-  /**
-   * Path al que redirigir cuando el backend devuelve 401 (sesión
-   * expirada o cookie inválida). Default: "/login".
-   */
+  /** Redirect path when 401 auth error occurs. Default: "/login". */
   redirectOnAuthError?: string
-  /**
-   * Llamado por el interceptor de respuesta cuando llega un 401.
-   * Default: navegación full-page con `window.location.href`
-   * (la cookie de sesión ya quedó limpia y una recarga completa
-   * garantiza que no quede estado stale de React Query / stores).
-   * Pasalo solo si necesitás otra estrategia (ej. router de Next
-   * sin recarga).
-   */
+  /** Custom handler for 401 redirect. Default: full page navigation via window.location.href. */
   onRedirect?: (path: string) => void
 }
 
+const isServer = typeof window === "undefined"
+
 /**
- * Crea un cliente HTTP basado en axios para una app Next.js.
- *
- * Características:
- * - `withCredentials: true` para enviar la cookie de sesión
- *   HTTP-Only de Better Auth en cada request automáticamente.
- * - Interceptor de respuesta: ante un 401 (sesión expirada o
- *   inválida) llama a `onRedirect` con el path configurado
- *   (default "/login"). Centraliza la lógica de "sesión vencida"
- *   en un solo lugar. Los 404 NO redirigen: un recurso no
- *   encontrado es un caso de negocio, no de sesión.
- * - Errores HTTP se normalizan a `ApiError` con `statusCode` y
- *   `data` accesibles.
- *
- * Cada app (public-web, panel, console) crea su propio `apiClient`
- * con su `baseURL` y (opcionalmente) su `onRedirect` particular.
- * No hay un cliente HTTP compartido en `@repo/shared` a propósito:
- * cada app puede tener headers, redirects y manejo de errores
- * distintos sin acoplarse.
+ * Creates an idiomatic ofetch-based HTTP client instance for Next.js applications.
+ * Features:
+ * - Cookie forwarding for SSR (next/headers) and credentials: "include" for CSR
+ * - Automatic 401 redirect handler
+ * - Normalized ApiError exceptions
  */
-export function createApiClient(options: ApiClientOptions): AxiosInstance {
+export function apiClient(options: ApiClientOptions) {
   const redirectPath = options.redirectOnAuthError ?? "/login"
   const onRedirect =
     options.onRedirect ??
@@ -64,30 +41,43 @@ export function createApiClient(options: ApiClientOptions): AxiosInstance {
       if (typeof window !== "undefined") window.location.href = path
     })
 
-  const instance = axios.create({
+  return ofetch.create({
     baseURL: options.baseURL,
-    withCredentials: true,
-    headers: { "content-type": "application/json" },
-  })
+    retry: 1,
+    timeout: 30_000,
 
-  instance.interceptors.response.use(
-    (response) => response,
-    (error: AxiosError<{ error?: string; message?: string }>) => {
-      const status = error.response?.status
-      const data = error.response?.data
+    async onRequest({ options: reqOptions }) {
+      if (isServer) {
+        const { cookies } = await import("next/headers")
+        const cookieStore = await cookies()
+        reqOptions.headers.set("cookie", cookieStore.toString())
+      } else {
+        reqOptions.credentials = "include"
+      }
+    },
+
+    onResponseError({ response }) {
+      const status = response?.status ?? 0
+      const data = response?._data as { error?: string; message?: string } | undefined
       const message =
-        data?.error ?? data?.message ?? error.message ?? "Request failed"
+        data?.error ?? data?.message ?? response?.statusText ?? "Request failed"
 
-      // 401: sesión expirada o cookie inválida. Cualquier otro
-      // status (incluido 404) se propaga como ApiError para que
-      // el service/página decida — no es problema de sesión.
       if (status === 401) {
         onRedirect(redirectPath)
       }
 
-      return Promise.reject(new ApiError(message, status ?? 0, data))
+      throw new ApiError(message, status, data)
     },
-  )
-
-  return instance
+  })
 }
+
+/**
+ * Pre-configured singleton API client instance for public-web application.
+ */
+export const api = apiClient({
+  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "",
+})
+
+export type ApiClient = typeof api
+
+
