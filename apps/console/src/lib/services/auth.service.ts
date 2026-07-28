@@ -1,11 +1,6 @@
 import type { authClient } from "../auth-client"
+import { authClient as client } from "../auth-client"
 
-/**
- * Tipos del Better Auth client que esta app inyecta. El service
- * no conoce los plugins específicos de cada app (public-web, panel,
- * console) — solo el subconjunto común que usan los componentes
- * de `@repo/ui`.
- */
 type AuthClient = typeof authClient
 
 export type AuthServiceError = { message: string } | null
@@ -35,19 +30,7 @@ export interface AuthService {
   }) => Promise<{ error: AuthServiceError }>
 }
 
-/**
- * Factory del service de autenticación de la app.
- *
- * Este service NO usa axios — Better Auth expone su propio
- * client (que ya está configurado con los plugins específicos
- * de cada app) y maneja las rutas `/api/auth/*` internamente.
- * La razón de existir es:
- *   1. Normalizar `{ data, error }` de Better Auth a la forma
- *      `{ error: { message } | null }` que esperan los componentes.
- *   2. Dar un punto único donde extender (telemetría, lockout
- *      en login, reintentos, etc.) sin tocar las páginas.
- */
-export function createAuthService(client: AuthClient): AuthService {
+function create(client: AuthClient): AuthService {
   return {
     signIn: {
       email: async (args) => {
@@ -71,3 +54,5 @@ export function createAuthService(client: AuthClient): AuthService {
     },
   }
 }
+
+export const authService = create(client)
