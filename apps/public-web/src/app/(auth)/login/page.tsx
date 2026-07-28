@@ -3,7 +3,7 @@
 import { Sparkles } from "lucide-react"
 import { Toaster } from "sonner"
 
-import { AuthCard, LoginForm } from "@repo/ui/components/auth"
+import { Login } from "@repo/ui/components/auth"
 
 import { authService } from "@/lib/services"
 
@@ -11,11 +11,20 @@ export default function LoginPage() {
   return (
     <>
       <Toaster richColors position="top-right" />
-      <AuthCard
-        title="Bienvenido"
+      <Login
+        authClient={authService}
+        redirectUrl="/dashboard"
+        methods={["password", "google", "github"]}
+        forgotPasswordUrl="/forgot-password"
+        signupUrl="/signup"
+        heading="Bienvenido"
         subtitle="Ingresa a tu cuenta para continuar"
-        logo={<Sparkles className="size-6" />}
-        variant="light"
+        featureCard={{
+          icon: <Sparkles className="size-8" />,
+          title: "Acceso unificado",
+          description:
+            "Un solo login para el panel de tu organización y todas las apps comerciales.",
+        }}
         footer={
           <p>
             ¿No tienes cuenta?{" "}
@@ -27,15 +36,7 @@ export default function LoginPage() {
             </a>
           </p>
         }
-      >
-        <LoginForm
-          authClient={authService}
-          redirectUrl="/dashboard"
-          methods={["password", "google", "github"]}
-          forgotPasswordUrl="/forgot-password"
-          signupUrl="/signup"
-        />
-      </AuthCard>
+      />
     </>
   )
 }

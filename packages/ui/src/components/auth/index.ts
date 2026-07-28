@@ -4,6 +4,14 @@ export type { AuthCardProps } from "./auth-card"
 export { LoginForm } from "./login-form"
 export type { LoginFormProps, LoginFormValues, AuthClient } from "./login-form"
 
+export { Login } from "./login"
+export type {
+  LoginProps,
+  LoginBrand,
+  LoginFeatureCard,
+  LoginPageFooter,
+} from "./login"
+
 export { SignupForm } from "./signup-form"
 export type {
   SignupFormProps,

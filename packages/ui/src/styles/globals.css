@@ -9,11 +9,20 @@
  *
  * Para customizar el tema de un proyecto: editá `tokens.css`,
  * no este archivo.
+ *
+ * @source directives: sin esto, Tailwind v4 solo escanea el working
+ * directory del build (la app que importa este archivo), no los
+ * componentes que viven en este package. Resultado: las clases usadas
+ * en `components/auth/*` no se generan y la UI se ve rota. El path
+ * es relativo a este archivo (`packages/ui/src/styles/`).
  */
 
 @import "./tokens.css";
 @import "tailwindcss";
 @import "tw-animate-css";
+
+@source "../**/*.{ts,tsx,js,jsx}";
+@source "../../../../apps/*/src/**/*.{ts,tsx,js,jsx}";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -82,5 +91,56 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer utilities {
+  @keyframes aurora {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+      opacity: 0.85;
+    }
+    50% {
+      transform: translate3d(2%, -1%, 0) scale(1.05);
+      opacity: 1;
+    }
+    100% {
+      transform: translate3d(-1%, 2%, 0) scale(0.98);
+      opacity: 0.9;
+    }
+  }
+
+  .bg-aurora {
+    background:
+      radial-gradient(
+        60% 50% at 15% 20%,
+        color-mix(in oklch, var(--primary) 55%, transparent) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        50% 60% at 85% 80%,
+        color-mix(in oklch, var(--ring) 35%, transparent) 0%,
+        transparent 65%
+      ),
+      radial-gradient(
+        70% 50% at 50% 50%,
+        color-mix(in oklch, var(--primary) 18%, transparent) 0%,
+        transparent 70%
+      ),
+      linear-gradient(
+        135deg,
+        var(--background) 0%,
+        color-mix(in oklch, var(--primary) 12%, var(--background)) 100%
+      );
+  }
+
+  .animate-aurora {
+    animation: aurora 14s ease-in-out infinite alternate;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-aurora {
+      animation: none;
+    }
   }
 }
