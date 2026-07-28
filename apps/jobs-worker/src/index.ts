@@ -3,19 +3,12 @@
 // el volumen de un tipo de evento justifica separarlo en su propio
 // Worker, se mueve su `case` a un nuevo consumer sin tocar api-worker
 // (el productor no sabe ni le importa cuántos consumers hay).
-
-type QueueEvent =
-  | {
-      type: "user.welcome_email"
-      userId: string
-      email: string
-      name: string | null
-    }
-  | {
-      type: "organization.created"
-      organizationId: string
-      organizationName: string
-    }
+//
+// El contrato de eventos se IMPORTA de @repo/shared/queue-events —
+// única fuente de verdad compartida con el producer (api-worker).
+// Si agregas un evento allí, el `switch` de dispatch() deja de ser
+// exhaustivo y el typecheck te avisa acá.
+import type { QueueEvent } from "@repo/shared/queue-events"
 
 type Env = {
   FILES_BUCKET: R2Bucket
@@ -42,6 +35,8 @@ async function dispatch(event: QueueEvent, env: Env) {
   switch (event.type) {
     case "user.welcome_email":
       return sendWelcomeEmail(event, env)
+    case "user.password_reset":
+      return sendPasswordResetEmail(event, env)
     case "organization.created":
       return notifyOrganizationCreated(event, env)
   }
@@ -61,6 +56,24 @@ async function sendWelcomeEmail(
       to: event.email,
       subject: "¡Bienvenido!",
       html: `<p>Hola ${event.name ?? ""}, tu cuenta fue creada.</p>`,
+    }),
+  })
+}
+
+async function sendPasswordResetEmail(
+  event: Extract<QueueEvent, { type: "user.password_reset" }>,
+  env: Env
+) {
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to: event.email,
+      subject: "Restablece tu contraseña",
+      html: `<p>Hola ${event.name ?? ""}, sigue este enlace para restablecer tu contraseña: <a href="${event.url}">${event.url}</a></p>`,
     }),
   })
 }

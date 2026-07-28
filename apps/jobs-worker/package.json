@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@repo/db": "workspace:*"
+    "@repo/db": "workspace:*",
+    "@repo/shared": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260721.1",

@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./access-control": "./src/access-control.ts",
+    "./queue-events": "./src/queue-events.ts",
     "./dto/*": "./src/dto/*.ts"
   },
   "dependencies": {
