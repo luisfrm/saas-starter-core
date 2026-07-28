@@ -92,6 +92,17 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+
+  /* Override browser default autofill background color using design tokens */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: var(--foreground);
+    transition: background-color 5000s ease-in-out 0s;
+    box-shadow: 0 0 0px 1000px var(--background) inset !important;
+  }
 }
 
 @layer utilities {
@@ -108,6 +119,10 @@
       transform: translate3d(-1%, 2%, 0) scale(0.98);
       opacity: 0.9;
     }
+  }
+
+  button {
+    cursor: pointer;
   }
 
   .bg-aurora {
