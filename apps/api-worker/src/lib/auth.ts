@@ -10,11 +10,14 @@ import {
   organizationAc,
   organizationRoles,
 } from "@repo/shared/access-control"
+import { ALLOWED_ORIGINS } from "./cors"
+import type { TaskQueueBinding } from "./queue"
 
 type Env = {
   DATABASE_URL: string
   BETTER_AUTH_SECRET: string
   BETTER_AUTH_URL: string
+  TASK_QUEUE: TaskQueueBinding
 }
 
 /**
@@ -32,8 +35,41 @@ export function createAuth(env: Env) {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
 
+    // Orígenes desde los que se aceptan sign-in/sign-up con cookie.
+    // Misma lista que el middleware CORS (ver lib/cors.ts).
+    trustedOrigins: [...ALLOWED_ORIGINS],
+
     emailAndPassword: {
       enabled: true,
+      // Forgot-password: la UI ya llama `requestPasswordReset`; este
+      // hook es el que realmente envía el email (vía cola → Resend).
+      sendResetPassword: async ({ user, url }) => {
+        await env.TASK_QUEUE.send({
+          type: "user.password_reset",
+          email: user.email,
+          name: user.name ?? null,
+          url,
+        })
+      },
+    },
+
+    // Side effects de ciclo de vida de usuarios. El email de
+    // bienvenida se publica acá (no en una ruta custom) porque
+    // Better Auth es quien crea el usuario — sign-up, invitación
+    // a una org, o alta desde el plugin admin pasan por este hook.
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            await env.TASK_QUEUE.send({
+              type: "user.welcome_email",
+              userId: user.id,
+              email: user.email,
+              name: user.name ?? null,
+            })
+          },
+        },
+      },
     },
 
     plugins: [
