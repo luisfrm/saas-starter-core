@@ -1,14 +1,16 @@
 "use client"
 
 import * as React from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react"
 
 import { Button } from "../ui/button"
+import { Checkbox } from "../ui/checkbox"
 import { Input } from "../ui/input"
+import { Label } from "../ui/label"
 import { Separator } from "../ui/separator"
 
 const loginSchema = z.object({
@@ -104,6 +106,7 @@ function LoginForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
     setError,
   } = useForm<LoginFormValues>({
@@ -223,15 +226,26 @@ function LoginForm({
             )}
           </div>
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className="size-4 rounded border-input text-primary focus:ring-2 focus:ring-ring/50"
-              disabled={isLoading}
-              {...register("rememberMe")}
+          <div className="flex items-center gap-2">
+            <Controller
+              name="rememberMe"
+              control={control}
+              render={({ field }) => (
+                <Checkbox
+                  id="rememberMe"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={isLoading}
+                />
+              )}
             />
-            <span>Recordarme</span>
-          </label>
+            <Label
+              htmlFor="rememberMe"
+              className="cursor-pointer text-sm font-normal text-muted-foreground"
+            >
+              Recordarme
+            </Label>
+          </div>
 
           {errors.root && (
             <p
