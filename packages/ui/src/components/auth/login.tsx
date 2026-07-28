@@ -173,7 +173,7 @@ function Login({
       {showFeatureCard && (
         <aside
           aria-hidden
-          className="bg-aurora animate-aurora relative hidden overflow-hidden md:flex md:w-1/2"
+          className="bg-aurora relative hidden overflow-hidden md:flex md:w-1/2"
         >
           <div className="absolute inset-0 flex items-center justify-center p-12">
             <div className="bg-white/10 flex w-full max-w-lg flex-col items-center gap-4 rounded-2xl border border-white/20 p-10 text-center shadow-2xl backdrop-blur-xl">

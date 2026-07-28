@@ -133,14 +133,4 @@
         color-mix(in oklch, var(--primary) 12%, var(--background)) 100%
       );
   }
-
-  .animate-aurora {
-    animation: aurora 14s ease-in-out infinite alternate;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .animate-aurora {
-      animation: none;
-    }
-  }
 }
